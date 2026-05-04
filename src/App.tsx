@@ -1,7 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore'
 import { authenticate, getLiveCategories, getLiveStreams } from './lib/xtream'
-import { loadFromCache, saveToCache, clearCache, cacheAgeLabel } from './lib/cache'
+import {
+  loadCategoriesFromCache,
+  loadAllStreamsFromCache,
+  loadCategoryStreamsFromCache,
+  saveCategoriesToCache,
+  saveAllStreamsToCache,
+  saveCategoryStreamsToCache,
+  clearCache,
+  cacheAgeLabel,
+} from './lib/cache'
 import LoginScreen from './components/LoginScreen'
 import ChannelList from './components/ChannelList'
 import VideoPlayer from './components/VideoPlayer'
@@ -24,8 +33,9 @@ function MainApp() {
   const initialLoadDone = useRef(false)
   const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [backgroundLoading, setBackgroundLoading] = useState(false)
 
-  // On mount: load channels from cache immediately, then verify auth in background
+  // ── Startup: load categories instantly, then background-fetch all streams ──
   useEffect(() => {
     if (!credentials || initialLoadDone.current) return
     initialLoadDone.current = true
@@ -33,80 +43,107 @@ function MainApp() {
     async function startup() {
       if (!credentials) return
 
-      // Step 1: Load from cache immediately — no network needed, instant UI
-      const cached = await loadFromCache()
-      if (cached) {
-        setCategories(cached.categories)
-        setAllStreams(cached.streams)
-        setStreams(cached.streams)
-        setCacheTimestamp(cached.timestamp)
+      // Step 1: Load categories — either from cache (instant) or network (~200ms)
+      const cachedCats = await loadCategoriesFromCache()
+      if (cachedCats) {
+        setCategories(cachedCats.data)
+        setCacheTimestamp(cachedCats.timestamp)
       } else {
-        // No cache yet — fetch fresh
-        setLoadingStreams(true)
         try {
-          const [categories, streams] = await Promise.all([
-            getLiveCategories(credentials),
-            getLiveStreams(credentials),
-          ])
+          const categories = await getLiveCategories(credentials)
           setCategories(categories)
-          setAllStreams(streams)
-          setStreams(streams)
-          const now = Date.now()
-          setCacheTimestamp(now)
-          saveToCache(streams, categories).catch(console.error)
+          setCacheTimestamp(Date.now())
+          saveCategoriesToCache(categories).catch(console.error)
         } catch (err) {
-          console.error('Failed to load channels:', err)
-        } finally {
-          setLoadingStreams(false)
+          console.error('Failed to load categories:', err)
         }
       }
 
-      // Step 2: Verify auth in background — only log out if truly invalid
-      // Don't block the UI on this
+      // Step 2: Load all streams in background for search (non-blocking)
+      const cachedAll = await loadAllStreamsFromCache()
+      if (cachedAll) {
+        setAllStreams(cachedAll.data)
+      } else {
+        // Fetch all streams in background — UI stays responsive
+        setBackgroundLoading(true)
+        try {
+          const allStreams = await getLiveStreams(credentials)
+          setAllStreams(allStreams)
+          saveAllStreamsToCache(allStreams).catch(console.error)
+        } catch (err) {
+          console.error('Background stream load failed:', err)
+        } finally {
+          setBackgroundLoading(false)
+        }
+      }
+
+      // Step 3: Verify auth silently in background
       try {
         await authenticate(credentials)
         setAuthenticated(true)
       } catch {
-        // Only show login if auth explicitly fails (not just network issues)
         setAuthError('Session expired. Please log in again.')
         logout()
       }
     }
 
     startup()
-  }, [credentials, setAuthenticated, setAuthError, setCategories, setStreams, setAllStreams, setLoadingStreams, logout])
+  }, [credentials, setAuthenticated, setAuthError, setCategories, setAllStreams, logout])
 
-  // Load streams for a specific category when selected
+  // ── Load streams for selected category on demand ──
   useEffect(() => {
     if (!credentials || selectedCategoryId === null) return
-    setLoadingStreams(true)
-    getLiveStreams(credentials, selectedCategoryId)
-      .then(setStreams)
-      .catch(console.error)
-      .finally(() => setLoadingStreams(false))
+
+    async function loadCategory() {
+      if (!credentials || selectedCategoryId === null) return
+
+      // Try cache first
+      const cached = await loadCategoryStreamsFromCache(selectedCategoryId)
+      if (cached) {
+        setStreams(cached)
+        return
+      }
+
+      // Fetch from network
+      setLoadingStreams(true)
+      try {
+        const streams = await getLiveStreams(credentials, selectedCategoryId)
+        setStreams(streams)
+        saveCategoryStreamsToCache(selectedCategoryId, streams).catch(console.error)
+      } catch (err) {
+        console.error('Failed to load category streams:', err)
+      } finally {
+        setLoadingStreams(false)
+      }
+    }
+
+    loadCategory()
   }, [selectedCategoryId, credentials, setStreams, setLoadingStreams])
 
-  // Force refresh — clears cache and re-fetches everything
+  // ── Force refresh: clear all cache and reload ──
   async function handleRefresh() {
     if (!credentials || refreshing) return
     setRefreshing(true)
     await clearCache()
+    initialLoadDone.current = false
+
     try {
-      setLoadingStreams(true)
-      const [categories, streams] = await Promise.all([
-        getLiveCategories(credentials),
-        getLiveStreams(credentials),
-      ])
+      // Reload categories
+      const categories = await getLiveCategories(credentials)
       setCategories(categories)
-      setAllStreams(streams)
-      setStreams(streams)
+      saveCategoriesToCache(categories).catch(console.error)
+
+      // Reload all streams in background
+      setBackgroundLoading(true)
+      const allStreams = await getLiveStreams(credentials)
+      setAllStreams(allStreams)
       const now = Date.now()
       setCacheTimestamp(now)
-      saveToCache(streams, categories).catch(console.error)
+      saveAllStreamsToCache(allStreams).catch(console.error)
     } catch (err) {
       console.error('Refresh failed:', err)
     } finally {
-      setLoadingStreams(false)
+      setBackgroundLoading(false)
       setRefreshing(false)
     }
   }
@@ -133,18 +170,34 @@ function MainApp() {
 
         <div className="flex items-center gap-3">
           {!activeStream && (
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              style={{ touchAction: 'manipulation' }}
-              className="flex items-center gap-1 text-gray-400 hover:text-gray-200 text-xs transition disabled:opacity-50"
-              title={cacheTimestamp ? `Cached ${cacheAgeLabel(cacheTimestamp)}` : 'Refresh channels'}
-            >
-              <span className={refreshing ? 'animate-spin inline-block' : ''}>↻</span>
-              {cacheTimestamp ? (
-                <span className="hidden sm:inline">{cacheAgeLabel(cacheTimestamp)}</span>
-              ) : null}
-            </button>
+            <>
+              {/* Background loading indicator */}
+              {backgroundLoading && (
+                <span className="text-gray-500 text-xs flex items-center gap-1">
+                  <span style={{
+                    display: 'inline-block',
+                    width: 10, height: 10,
+                    border: '1.5px solid #6b7280',
+                    borderTopColor: 'transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                  <span className="hidden sm:inline">Indexing...</span>
+                </span>
+              )}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                style={{ touchAction: 'manipulation' }}
+                className="flex items-center gap-1 text-gray-400 hover:text-gray-200 text-xs transition disabled:opacity-50"
+                title={cacheTimestamp ? `Cached ${cacheAgeLabel(cacheTimestamp)}` : 'Refresh channels'}
+              >
+                <span className={refreshing ? 'animate-spin inline-block' : ''}>↻</span>
+                {cacheTimestamp ? (
+                  <span className="hidden sm:inline">{cacheAgeLabel(cacheTimestamp)}</span>
+                ) : null}
+              </button>
+            </>
           )}
 
           <button
@@ -170,7 +223,7 @@ function MainApp() {
             'flex-col',
           ].join(' ')}
         >
-          <ChannelList />
+          <ChannelList backgroundLoading={backgroundLoading} />
         </div>
 
         {/* Player panel */}
@@ -194,6 +247,7 @@ function MainApp() {
         </div>
 
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
@@ -201,8 +255,6 @@ function MainApp() {
 export default function App() {
   const { credentials } = useStore()
 
-  // If we have saved credentials, go straight to the main app
-  // Auth verification happens in the background inside MainApp
   if (!credentials) {
     return <LoginScreen />
   }

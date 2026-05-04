@@ -56,7 +56,11 @@ function ChannelItem({ stream, isFavorite, isActive, onSelect, onToggleFavorite 
   )
 }
 
-export default function ChannelList() {
+interface ChannelListProps {
+  backgroundLoading?: boolean
+}
+
+export default function ChannelList({ backgroundLoading }: ChannelListProps) {
   const {
     streams,
     allStreams,
@@ -108,7 +112,7 @@ export default function ChannelList() {
             inputMode="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search channels..."
+            placeholder={backgroundLoading ? 'Indexing channels...' : 'Search channels...'}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"

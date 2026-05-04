@@ -17,6 +17,7 @@ function MainApp() {
     setLoadingStreams,
     selectedCategoryId,
     activeStream,
+    setActiveStream,
     logout,
   } = useStore()
 
@@ -57,14 +58,25 @@ function MainApp() {
   return (
     <div className="h-screen bg-gray-950 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center justify-between flex-shrink-0">
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
+          {/* Back button — only shown on mobile when player is active */}
+          {activeStream && (
+            <button
+              onClick={() => setActiveStream(null)}
+              className="md:hidden text-blue-400 hover:text-blue-300 text-sm font-medium mr-1 flex items-center gap-1 transition"
+            >
+              ‹ Back
+            </button>
+          )}
           <span className="text-xl">📺</span>
-          <span className="text-white font-semibold text-sm">IPTV Player</span>
+          <span className="text-white font-semibold text-sm">
+            {activeStream ? activeStream.name : 'IPTV Player'}
+          </span>
         </div>
         <button
           onClick={logout}
-          className="text-gray-400 hover:text-gray-200 text-xs transition"
+          className="text-gray-400 hover:text-gray-200 text-xs transition px-2 py-1"
         >
           Disconnect
         </button>
@@ -72,15 +84,37 @@ function MainApp() {
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
-        {/* Channel list — hidden on mobile when player is active */}
-        <div className={`${activeStream ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-800`}>
-          <div className="w-full">
-            <ChannelList />
-          </div>
+
+        {/*
+          Mobile: show either channel list OR player (not both)
+          Desktop (md+): show channel list on left, player on right
+        */}
+
+        {/* Channel list panel */}
+        <div
+          className={[
+            // Mobile: full width, hidden when player is active
+            activeStream ? 'hidden' : 'flex',
+            // Desktop: always visible as a sidebar
+            'md:flex',
+            'w-full md:w-80 lg:w-96 flex-shrink-0',
+            'border-r border-gray-800',
+            'flex-col',
+          ].join(' ')}
+        >
+          <ChannelList />
         </div>
 
-        {/* Player area */}
-        <div className={`${activeStream ? 'flex' : 'hidden md:flex'} flex-1 flex-col`}>
+        {/* Player panel */}
+        <div
+          className={[
+            // Mobile: full width, only shown when player is active
+            activeStream ? 'flex' : 'hidden',
+            // Desktop: always visible, fills remaining space
+            'md:flex',
+            'flex-1 flex-col',
+          ].join(' ')}
+        >
           {activeStream ? (
             <VideoPlayer />
           ) : (
@@ -92,6 +126,7 @@ function MainApp() {
             </div>
           )}
         </div>
+
       </div>
     </div>
   )

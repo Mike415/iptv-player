@@ -62,20 +62,6 @@ async function set(key: string, data: unknown): Promise<void> {
   }
 }
 
-async function clearKey(key: string): Promise<void> {
-  try {
-    const db = await openDB()
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite')
-      tx.objectStore(STORE_NAME).delete(key)
-      tx.oncomplete = () => resolve()
-      tx.onerror = () => resolve()
-    })
-  } catch {
-    // Ignore
-  }
-}
-
 async function clearAll(): Promise<void> {
   try {
     const db = await openDB()

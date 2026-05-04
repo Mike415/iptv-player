@@ -22,8 +22,8 @@ function buildApiUrl(creds: XtreamCredentials, params: Record<string, string>): 
 }
 
 export function buildStreamUrl(creds: XtreamCredentials, streamId: number): string {
-  const base = creds.server.replace(/\/$/, '')
-  // Stream URLs are fetched directly by hls.js — no proxy needed for video segments
+  // Always use HTTPS for stream URLs — browsers block HTTP requests from HTTPS pages
+  const base = creds.server.replace(/\/$/, '').replace(/^http:\/\//, 'https://')
   return `${base}/live/${creds.username}/${creds.password}/${streamId}.m3u8`
 }
 

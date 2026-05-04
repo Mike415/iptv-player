@@ -1,1 +1,32 @@
 @import "tailwindcss";
+
+/* Ensure the full document tree fills the viewport on all browsers including iOS Safari */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  /* Prevent iOS Safari from bouncing the whole page */
+  overscroll-behavior: none;
+}
+
+/* Remove iOS input styling that can interfere with tap targets */
+input,
+button,
+select,
+textarea {
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Ensure inputs are always tappable on iOS */
+input[type="search"],
+input[type="text"],
+input[type="password"] {
+  touch-action: manipulation;
+  cursor: text;
+  -webkit-user-select: text;
+  pointer-events: auto;
+}

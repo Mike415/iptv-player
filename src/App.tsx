@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useStore } from './store/useStore'
 import { authenticate, getLiveCategories, getLiveStreams } from './lib/xtream'
 import LoginScreen from './components/LoginScreen'
@@ -21,6 +21,9 @@ function MainApp() {
     logout,
   } = useStore()
 
+  // Track whether we've done the initial full load
+  const initialLoadDone = useRef(false)
+
   // Auto-authenticate on load if credentials are saved
   useEffect(() => {
     if (!credentials || isAuthenticated) return
@@ -31,21 +34,32 @@ function MainApp() {
       })
   }, [credentials, isAuthenticated, setAuthenticated, setAuthError])
 
-  // Load categories + all streams once authenticated
+  // On auth: load categories immediately (fast), then load ALL streams in background
+  // This lets the user see categories and interact right away
   useEffect(() => {
-    if (!isAuthenticated || !credentials) return
-    getLiveCategories(credentials).then(setCategories).catch(console.error)
-    setLoadingStreams(true)
-    getLiveStreams(credentials)
-      .then((streams) => {
-        setAllStreams(streams)
-        setStreams(streams)
-      })
+    if (!isAuthenticated || !credentials || initialLoadDone.current) return
+    initialLoadDone.current = true
+
+    // Step 1: Load categories — fast, shows UI immediately
+    getLiveCategories(credentials)
+      .then(setCategories)
       .catch(console.error)
-      .finally(() => setLoadingStreams(false))
+
+    // Step 2: Load all streams in background — non-blocking
+    // Use setTimeout to yield to the browser first so UI renders
+    setTimeout(() => {
+      setLoadingStreams(true)
+      getLiveStreams(credentials)
+        .then((streams) => {
+          setAllStreams(streams)
+          setStreams(streams)
+        })
+        .catch(console.error)
+        .finally(() => setLoadingStreams(false))
+    }, 100)
   }, [isAuthenticated, credentials, setCategories, setStreams, setAllStreams, setLoadingStreams])
 
-  // Load streams when category changes
+  // Load streams for a specific category when selected
   useEffect(() => {
     if (!isAuthenticated || !credentials || selectedCategoryId === null) return
     setLoadingStreams(true)
@@ -85,17 +99,10 @@ function MainApp() {
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
 
-        {/*
-          Mobile: show either channel list OR player (not both)
-          Desktop (md+): show channel list on left, player on right
-        */}
-
-        {/* Channel list panel */}
+        {/* Channel list panel — full width on mobile, sidebar on desktop */}
         <div
           className={[
-            // Mobile: full width, hidden when player is active
             activeStream ? 'hidden' : 'flex',
-            // Desktop: always visible as a sidebar
             'md:flex',
             'w-full md:w-80 lg:w-96 flex-shrink-0',
             'border-r border-gray-800',
@@ -105,12 +112,10 @@ function MainApp() {
           <ChannelList />
         </div>
 
-        {/* Player panel */}
+        {/* Player panel — full width on mobile when active, right side on desktop */}
         <div
           className={[
-            // Mobile: full width, only shown when player is active
             activeStream ? 'flex' : 'hidden',
-            // Desktop: always visible, fills remaining space
             'md:flex',
             'flex-1 flex-col',
           ].join(' ')}

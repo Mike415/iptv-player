@@ -108,7 +108,7 @@ export default function ChannelList({ backgroundLoading }: ChannelListProps) {
             color: '#6b7280', fontSize: 14, pointerEvents: 'none', userSelect: 'none'
           }}>🔍</span>
           <input
-            type="search"
+            type="text"
             inputMode="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -130,7 +130,6 @@ export default function ChannelList({ backgroundLoading }: ChannelListProps) {
               color: 'white',
               outline: 'none',
               boxSizing: 'border-box',
-              WebkitAppearance: 'none',
             }}
           />
         </div>

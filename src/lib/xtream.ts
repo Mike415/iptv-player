@@ -7,15 +7,9 @@ import type {
   DecodedEpgListing,
 } from '../types/xtream'
 
-const CORS_PROXY = 'https://iptv-cors-proxy.mike415.workers.dev'
-
-/**
- * Wraps a target URL through the CORS proxy so browser requests work
- * from GitHub Pages (which is on a different origin than the IPTV server).
- */
-function proxied(targetUrl: string): string {
-  return `${CORS_PROXY}?url=${encodeURIComponent(targetUrl)}`
-}
+// CORS proxy — used as fallback if the provider doesn't support HTTPS
+// (Cloudflare Worker at https://iptv-cors-proxy.mike415.workers.dev)
+// Currently not needed since we upgrade all server URLs to HTTPS at login time.
 
 function buildApiUrl(creds: XtreamCredentials, params: Record<string, string>): string {
   const base = creds.server.replace(/\/$/, '')
@@ -24,7 +18,7 @@ function buildApiUrl(creds: XtreamCredentials, params: Record<string, string>): 
     password: creds.password,
     ...params,
   })
-  return proxied(`${base}/player_api.php?${query.toString()}`)
+  return `${base}/player_api.php?${query.toString()}`
 }
 
 export function buildStreamUrl(creds: XtreamCredentials, streamId: number): string {

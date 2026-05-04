@@ -16,11 +16,14 @@ export default function LoginScreen() {
     setAuthError(null)
     setLoading(true)
 
-    // Normalize server URL
+    // Normalize server URL — always upgrade to HTTPS to avoid mixed-content
+    // blocks on Safari/iOS (GitHub Pages is HTTPS, so HTTP requests are blocked)
     let serverUrl = server.trim()
     if (!serverUrl.startsWith('http://') && !serverUrl.startsWith('https://')) {
-      serverUrl = 'http://' + serverUrl
+      serverUrl = 'https://' + serverUrl
     }
+    // Upgrade http → https
+    serverUrl = serverUrl.replace(/^http:\/\//, 'https://')
     serverUrl = serverUrl.replace(/\/$/, '')
 
     const creds = { server: serverUrl, username: username.trim(), password: password.trim() }
@@ -53,7 +56,7 @@ export default function LoginScreen() {
               type="text"
               value={server}
               onChange={(e) => setServer(e.target.value)}
-              placeholder="http://yourprovider.com"
+              placeholder="https://yourprovider.com"
               required
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition"
             />

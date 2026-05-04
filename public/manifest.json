@@ -1,0 +1,25 @@
+{
+  "name": "IPTV Player",
+  "short_name": "IPTV",
+  "description": "Personal IPTV player with Xtream Codes support",
+  "start_url": "/iptv-player/",
+  "scope": "/iptv-player/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#030712",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/iptv-player/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/iptv-player/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

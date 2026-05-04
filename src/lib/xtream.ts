@@ -21,10 +21,15 @@ function buildApiUrl(creds: XtreamCredentials, params: Record<string, string>): 
   return `${base}/player_api.php?${query.toString()}`
 }
 
+const CORS_PROXY = 'https://iptv-cors-proxy.mike415.workers.dev'
+
 export function buildStreamUrl(creds: XtreamCredentials, streamId: number): string {
-  // Always use HTTPS for stream URLs — browsers block HTTP requests from HTTPS pages
+  // Build the direct stream URL first
   const base = creds.server.replace(/\/$/, '').replace(/^http:\/\//, 'https://')
-  return `${base}/live/${creds.username}/${creds.password}/${streamId}.m3u8`
+  const directUrl = `${base}/live/${creds.username}/${creds.password}/${streamId}.m3u8`
+  // Route through CORS proxy — the proxy follows HTTP redirects server-side,
+  // solving the mixed-content block where providers redirect HTTPS → HTTP
+  return `${CORS_PROXY}/?url=${encodeURIComponent(directUrl)}`
 }
 
 export async function authenticate(creds: XtreamCredentials): Promise<XtreamAuthResponse> {

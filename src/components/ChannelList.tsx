@@ -12,46 +12,42 @@ interface ChannelItemProps {
 
 function ChannelItem({ stream, isFavorite, isActive, onSelect, onToggleFavorite }: ChannelItemProps) {
   return (
-    <div
-      style={{ touchAction: 'manipulation' }}
-      className={`flex items-center gap-3 px-4 py-3 cursor-pointer border-b border-gray-800/50 ${
-        isActive ? 'bg-blue-600' : 'active:bg-gray-700'
-      }`}
-      onClick={() => onSelect(stream)}
-    >
-      {/* Channel logo */}
-      <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded overflow-hidden bg-gray-800">
-        {stream.stream_icon ? (
-          <img
-            src={stream.stream_icon}
-            alt=""
-            className="w-9 h-9 object-contain"
-            loading="lazy"
-            onError={(e) => {
-              const el = e.target as HTMLImageElement
-              el.style.display = 'none'
-            }}
-          />
-        ) : (
-          <span className="text-gray-500 text-base">📺</span>
-        )}
-      </div>
-
-      {/* Channel name */}
-      <span className={`flex-1 text-sm truncate ${isActive ? 'text-white font-medium' : 'text-gray-200'}`}>
-        {stream.name}
-      </span>
-
-      {/* Favorite button — large tap target */}
+    // Use a real <button> so iOS Safari fires click reliably
+    <div className={`flex items-center border-b border-gray-800/50 ${isActive ? 'bg-blue-600' : ''}`}>
       <button
-        onClick={(e) => {
-          e.stopPropagation()
-          onToggleFavorite(stream.stream_id)
-        }}
-        style={{ touchAction: 'manipulation' }}
-        className={`flex-shrink-0 w-10 h-10 flex items-center justify-center text-xl ${
+        type="button"
+        onClick={() => onSelect(stream)}
+        className="flex items-center gap-3 flex-1 px-4 py-3 text-left min-w-0"
+        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+      >
+        {/* Channel logo */}
+        <div className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded overflow-hidden bg-gray-800">
+          {stream.stream_icon ? (
+            <img
+              src={stream.stream_icon}
+              alt=""
+              className="w-9 h-9 object-contain"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          ) : (
+            <span className="text-gray-500 text-base">📺</span>
+          )}
+        </div>
+        {/* Channel name */}
+        <span className={`flex-1 text-sm truncate ${isActive ? 'text-white font-medium' : 'text-gray-200'}`}>
+          {stream.name}
+        </span>
+      </button>
+
+      {/* Favorite button — separate from the channel select button */}
+      <button
+        type="button"
+        onClick={() => onToggleFavorite(stream.stream_id)}
+        className={`flex-shrink-0 w-12 h-12 flex items-center justify-center text-xl pr-2 ${
           isFavorite ? 'text-yellow-400' : 'text-gray-600'
         }`}
+        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
         aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
       >
         {isFavorite ? '★' : '☆'}
@@ -97,12 +93,16 @@ export default function ChannelList() {
   )
 
   return (
-    <div className="flex flex-col h-full bg-gray-950" style={{ WebkitOverflowScrolling: 'touch' }}>
+    // Outer container: fixed height, no overflow — children manage their own scroll
+    <div className="flex flex-col bg-gray-950" style={{ height: '100%', overflow: 'hidden' }}>
 
-      {/* Search bar */}
-      <div className="px-3 pt-3 pb-2 flex-shrink-0">
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none select-none">🔍</span>
+      {/* Search bar — fixed, never scrolls */}
+      <div style={{ flexShrink: 0, padding: '12px 12px 8px' }}>
+        <div style={{ position: 'relative' }}>
+          <span style={{
+            position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+            color: '#6b7280', fontSize: 14, pointerEvents: 'none', userSelect: 'none'
+          }}>🔍</span>
           <input
             type="search"
             inputMode="search"
@@ -113,96 +113,165 @@ export default function ChannelList() {
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
-            className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-9 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition"
+            style={{
+              width: '100%',
+              background: '#1f2937',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              paddingLeft: 36,
+              paddingRight: 16,
+              paddingTop: 12,
+              paddingBottom: 12,
+              fontSize: 14,
+              color: 'white',
+              outline: 'none',
+              boxSizing: 'border-box',
+              WebkitAppearance: 'none',
+            }}
           />
         </div>
       </div>
 
-      {/* Category tabs — horizontal scroll */}
+      {/* Category tabs — horizontal scroll, fixed height */}
       <div
         ref={tabsRef}
-        className="flex-shrink-0 flex gap-2 px-3 pb-2 overflow-x-auto"
-        style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          gap: 8,
+          padding: '0 12px 8px',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          // Prevent this scroll from conflicting with vertical channel list scroll
+          touchAction: 'pan-x',
+        }}
       >
-        {/* Favorites tab */}
         <button
+          type="button"
           onClick={() => setShowFavoritesOnly(true)}
-          style={{ touchAction: 'manipulation' }}
-          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
-            showFavoritesOnly
-              ? 'bg-yellow-500 text-black'
-              : 'bg-gray-800 text-gray-300'
-          }`}
+          style={{
+            flexShrink: 0,
+            padding: '8px 16px',
+            borderRadius: 999,
+            fontSize: 14,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            border: 'none',
+            cursor: 'pointer',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            background: showFavoritesOnly ? '#eab308' : '#1f2937',
+            color: showFavoritesOnly ? '#000' : '#d1d5db',
+          }}
         >
           ★ Favorites{favoriteCount > 0 ? ` (${favoriteCount})` : ''}
         </button>
 
-        {/* All Channels tab */}
         <button
+          type="button"
           onClick={() => setSelectedCategoryId(null)}
-          style={{ touchAction: 'manipulation' }}
-          className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
-            !selectedCategoryId && !showFavoritesOnly && !searchQuery
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-800 text-gray-300'
-          }`}
+          style={{
+            flexShrink: 0,
+            padding: '8px 16px',
+            borderRadius: 999,
+            fontSize: 14,
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            border: 'none',
+            cursor: 'pointer',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            background: (!selectedCategoryId && !showFavoritesOnly && !searchQuery) ? '#2563eb' : '#1f2937',
+            color: (!selectedCategoryId && !showFavoritesOnly && !searchQuery) ? '#fff' : '#d1d5db',
+          }}
         >
           All Channels
         </button>
 
-        {/* Category tabs */}
         {categories.map((cat) => (
           <button
             key={cat.category_id}
+            type="button"
             onClick={() => setSelectedCategoryId(cat.category_id)}
-            style={{ touchAction: 'manipulation' }}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap ${
-              selectedCategoryId === cat.category_id
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-300'
-            }`}
+            style={{
+              flexShrink: 0,
+              padding: '8px 16px',
+              borderRadius: 999,
+              fontSize: 14,
+              fontWeight: 500,
+              whiteSpace: 'nowrap',
+              border: 'none',
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+              WebkitTapHighlightColor: 'transparent',
+              background: selectedCategoryId === cat.category_id ? '#2563eb' : '#1f2937',
+              color: selectedCategoryId === cat.category_id ? '#fff' : '#d1d5db',
+            }}
           >
             {cat.category_name}
           </button>
         ))}
       </div>
 
-      {/* Channel list */}
-      <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      {/* Channel list — takes remaining height, scrolls vertically */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        // Allow vertical scroll only — prevents conflict with horizontal tab scroll
+        touchAction: 'pan-y',
+        minHeight: 0,
+      }}>
         {displayedStreams.length === 0 && loadingStreams ? (
-          /* Loading state — only show when list is empty AND loading */
-          <div className="flex flex-col items-center justify-center h-32 gap-3">
-            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-gray-500 text-sm">Loading channels...</span>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, gap: 12 }}>
+            <div style={{
+              width: 24, height: 24,
+              border: '2px solid #3b82f6',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }} />
+            <span style={{ color: '#6b7280', fontSize: 14 }}>Loading channels...</span>
           </div>
         ) : displayedStreams.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-gray-500 text-sm gap-2">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 120, color: '#6b7280', fontSize: 14, gap: 8 }}>
             {showFavoritesOnly
-              ? <><span className="text-3xl">☆</span><span>No favorites yet — tap ☆ on any channel</span></>
+              ? <><span style={{ fontSize: 32 }}>☆</span><span>No favorites yet — tap ☆ on any channel</span></>
               : <span>No channels found</span>
             }
           </div>
         ) : (
-          displayedStreams.map((stream) => (
-            <ChannelItem
-              key={stream.stream_id}
-              stream={stream}
-              isFavorite={favorites.includes(stream.stream_id)}
-              isActive={activeStream?.stream_id === stream.stream_id}
-              onSelect={setActiveStream}
-              onToggleFavorite={toggleFavorite}
-            />
-          ))
-        )}
-
-        {/* Subtle loading indicator at bottom when channels are present but still loading */}
-        {displayedStreams.length > 0 && loadingStreams && (
-          <div className="flex items-center justify-center py-4 gap-2 text-gray-600 text-xs">
-            <div className="w-3 h-3 border border-gray-600 border-t-transparent rounded-full animate-spin" />
-            Loading more...
-          </div>
+          <>
+            {displayedStreams.map((stream) => (
+              <ChannelItem
+                key={stream.stream_id}
+                stream={stream}
+                isFavorite={favorites.includes(stream.stream_id)}
+                isActive={activeStream?.stream_id === stream.stream_id}
+                onSelect={setActiveStream}
+                onToggleFavorite={toggleFavorite}
+              />
+            ))}
+            {loadingStreams && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px 0', gap: 8, color: '#4b5563', fontSize: 12 }}>
+                <div style={{
+                  width: 12, height: 12,
+                  border: '1px solid #4b5563',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+                Loading more...
+              </div>
+            )}
+          </>
         )}
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }

@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/useStore'
 import { authenticate, getLiveCategories, getLiveStreams } from './lib/xtream'
+import { loadFromCache, saveToCache, clearCache, cacheAgeLabel } from './lib/cache'
 import LoginScreen from './components/LoginScreen'
 import ChannelList from './components/ChannelList'
 import VideoPlayer from './components/VideoPlayer'
@@ -21,8 +22,9 @@ function MainApp() {
     logout,
   } = useStore()
 
-  // Track whether we've done the initial full load
   const initialLoadDone = useRef(false)
+  const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Auto-authenticate on load if credentials are saved
   useEffect(() => {
@@ -34,29 +36,46 @@ function MainApp() {
       })
   }, [credentials, isAuthenticated, setAuthenticated, setAuthError])
 
-  // On auth: load categories immediately (fast), then load ALL streams in background
-  // This lets the user see categories and interact right away
+  // On auth: try cache first, then fetch fresh if needed
   useEffect(() => {
     if (!isAuthenticated || !credentials || initialLoadDone.current) return
     initialLoadDone.current = true
 
-    // Step 1: Load categories — fast, shows UI immediately
-    getLiveCategories(credentials)
-      .then(setCategories)
-      .catch(console.error)
+    async function loadChannels() {
+      if (!credentials) return
 
-    // Step 2: Load all streams in background — non-blocking
-    // Use setTimeout to yield to the browser first so UI renders
-    setTimeout(() => {
+      // Try loading from cache first — instant
+      const cached = await loadFromCache()
+      if (cached) {
+        setCategories(cached.categories)
+        setAllStreams(cached.streams)
+        setStreams(cached.streams)
+        setCacheTimestamp(cached.timestamp)
+        // Don't show loading spinner since we have cached data
+        return
+      }
+
+      // No cache — fetch fresh
       setLoadingStreams(true)
-      getLiveStreams(credentials)
-        .then((streams) => {
-          setAllStreams(streams)
-          setStreams(streams)
-        })
-        .catch(console.error)
-        .finally(() => setLoadingStreams(false))
-    }, 100)
+      try {
+        const [categories, streams] = await Promise.all([
+          getLiveCategories(credentials),
+          getLiveStreams(credentials),
+        ])
+        setCategories(categories)
+        setAllStreams(streams)
+        setStreams(streams)
+        setCacheTimestamp(Date.now())
+        // Save to cache in background
+        saveToCache(streams, categories).catch(console.error)
+      } catch (err) {
+        console.error('Failed to load channels:', err)
+      } finally {
+        setLoadingStreams(false)
+      }
+    }
+
+    loadChannels()
   }, [isAuthenticated, credentials, setCategories, setStreams, setAllStreams, setLoadingStreams])
 
   // Load streams for a specific category when selected
@@ -69,16 +88,41 @@ function MainApp() {
       .finally(() => setLoadingStreams(false))
   }, [selectedCategoryId, isAuthenticated, credentials, setStreams, setLoadingStreams])
 
+  // Force refresh — clears cache and re-fetches everything
+  async function handleRefresh() {
+    if (!credentials || refreshing) return
+    setRefreshing(true)
+    await clearCache()
+    try {
+      setLoadingStreams(true)
+      const [categories, streams] = await Promise.all([
+        getLiveCategories(credentials),
+        getLiveStreams(credentials),
+      ])
+      setCategories(categories)
+      setAllStreams(streams)
+      setStreams(streams)
+      const now = Date.now()
+      setCacheTimestamp(now)
+      saveToCache(streams, categories).catch(console.error)
+    } catch (err) {
+      console.error('Refresh failed:', err)
+    } finally {
+      setLoadingStreams(false)
+      setRefreshing(false)
+    }
+  }
+
   return (
     <div className="h-screen bg-gray-950 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
-          {/* Back button — only shown on mobile when player is active */}
           {activeStream && (
             <button
               onClick={() => setActiveStream(null)}
-              className="md:hidden text-blue-400 hover:text-blue-300 text-sm font-medium mr-1 flex items-center gap-1 transition"
+              style={{ touchAction: 'manipulation' }}
+              className="md:hidden text-blue-400 text-sm font-medium mr-1 transition"
             >
               ‹ Back
             </button>
@@ -88,18 +132,38 @@ function MainApp() {
             {activeStream ? activeStream.name : 'IPTV Player'}
           </span>
         </div>
-        <button
-          onClick={logout}
-          className="text-gray-400 hover:text-gray-200 text-xs transition px-2 py-1"
-        >
-          Disconnect
-        </button>
+
+        <div className="flex items-center gap-3">
+          {/* Cache age + refresh button — only shown when not watching */}
+          {!activeStream && (
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              style={{ touchAction: 'manipulation' }}
+              className="flex items-center gap-1 text-gray-400 hover:text-gray-200 text-xs transition disabled:opacity-50"
+              title={cacheTimestamp ? `Cached ${cacheAgeLabel(cacheTimestamp)}` : 'Refresh channels'}
+            >
+              <span className={refreshing ? 'animate-spin inline-block' : ''}>↻</span>
+              {cacheTimestamp ? (
+                <span className="hidden sm:inline">{cacheAgeLabel(cacheTimestamp)}</span>
+              ) : null}
+            </button>
+          )}
+
+          <button
+            onClick={logout}
+            style={{ touchAction: 'manipulation' }}
+            className="text-gray-400 hover:text-gray-200 text-xs transition px-2 py-1"
+          >
+            Disconnect
+          </button>
+        </div>
       </header>
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
 
-        {/* Channel list panel — full width on mobile, sidebar on desktop */}
+        {/* Channel list panel */}
         <div
           className={[
             activeStream ? 'hidden' : 'flex',
@@ -112,7 +176,7 @@ function MainApp() {
           <ChannelList />
         </div>
 
-        {/* Player panel — full width on mobile when active, right side on desktop */}
+        {/* Player panel */}
         <div
           className={[
             activeStream ? 'flex' : 'hidden',

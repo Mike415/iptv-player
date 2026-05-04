@@ -122,7 +122,7 @@ export default function ChannelList() {
               paddingRight: 16,
               paddingTop: 12,
               paddingBottom: 12,
-              fontSize: 14,
+              fontSize: 16, /* Must be >=16px to prevent iOS Safari auto-zoom on focus */
               color: 'white',
               outline: 'none',
               boxSizing: 'border-box',

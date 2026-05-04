@@ -9,7 +9,6 @@ import VideoPlayer from './components/VideoPlayer'
 function MainApp() {
   const {
     credentials,
-    isAuthenticated,
     setAuthenticated,
     setAuthError,
     setCategories,
@@ -26,67 +25,66 @@ function MainApp() {
   const [cacheTimestamp, setCacheTimestamp] = useState<number | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
-  // Auto-authenticate on load if credentials are saved
+  // On mount: load channels from cache immediately, then verify auth in background
   useEffect(() => {
-    if (!credentials || isAuthenticated) return
-    authenticate(credentials)
-      .then(() => setAuthenticated(true))
-      .catch(() => {
-        setAuthError('Saved credentials are invalid. Please log in again.')
-      })
-  }, [credentials, isAuthenticated, setAuthenticated, setAuthError])
-
-  // On auth: try cache first, then fetch fresh if needed
-  useEffect(() => {
-    if (!isAuthenticated || !credentials || initialLoadDone.current) return
+    if (!credentials || initialLoadDone.current) return
     initialLoadDone.current = true
 
-    async function loadChannels() {
+    async function startup() {
       if (!credentials) return
 
-      // Try loading from cache first — instant
+      // Step 1: Load from cache immediately — no network needed, instant UI
       const cached = await loadFromCache()
       if (cached) {
         setCategories(cached.categories)
         setAllStreams(cached.streams)
         setStreams(cached.streams)
         setCacheTimestamp(cached.timestamp)
-        // Don't show loading spinner since we have cached data
-        return
+      } else {
+        // No cache yet — fetch fresh
+        setLoadingStreams(true)
+        try {
+          const [categories, streams] = await Promise.all([
+            getLiveCategories(credentials),
+            getLiveStreams(credentials),
+          ])
+          setCategories(categories)
+          setAllStreams(streams)
+          setStreams(streams)
+          const now = Date.now()
+          setCacheTimestamp(now)
+          saveToCache(streams, categories).catch(console.error)
+        } catch (err) {
+          console.error('Failed to load channels:', err)
+        } finally {
+          setLoadingStreams(false)
+        }
       }
 
-      // No cache — fetch fresh
-      setLoadingStreams(true)
+      // Step 2: Verify auth in background — only log out if truly invalid
+      // Don't block the UI on this
       try {
-        const [categories, streams] = await Promise.all([
-          getLiveCategories(credentials),
-          getLiveStreams(credentials),
-        ])
-        setCategories(categories)
-        setAllStreams(streams)
-        setStreams(streams)
-        setCacheTimestamp(Date.now())
-        // Save to cache in background
-        saveToCache(streams, categories).catch(console.error)
-      } catch (err) {
-        console.error('Failed to load channels:', err)
-      } finally {
-        setLoadingStreams(false)
+        await authenticate(credentials)
+        setAuthenticated(true)
+      } catch {
+        // Only show login if auth explicitly fails (not just network issues)
+        setAuthError('Session expired. Please log in again.')
+        logout()
       }
     }
 
-    loadChannels()
-  }, [isAuthenticated, credentials, setCategories, setStreams, setAllStreams, setLoadingStreams])
+    startup()
+  }, [credentials, setAuthenticated, setAuthError, setCategories, setStreams, setAllStreams, setLoadingStreams, logout])
 
   // Load streams for a specific category when selected
   useEffect(() => {
-    if (!isAuthenticated || !credentials || selectedCategoryId === null) return
+    if (!credentials || selectedCategoryId === null) return
     setLoadingStreams(true)
     getLiveStreams(credentials, selectedCategoryId)
       .then(setStreams)
       .catch(console.error)
       .finally(() => setLoadingStreams(false))
-  }, [selectedCategoryId, isAuthenticated, credentials, setStreams, setLoadingStreams])
+  }, [selectedCategoryId, credentials, setStreams, setLoadingStreams])
 
   // Force refresh — clears cache and re-fetches everything
   async function handleRefresh() {
@@ -134,7 +132,6 @@ function MainApp() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Cache age + refresh button — only shown when not watching */}
           {!activeStream && (
             <button
               onClick={handleRefresh}
@@ -202,9 +199,11 @@ function MainApp() {
 }
 
 export default function App() {
-  const { credentials, isAuthenticated } = useStore()
+  const { credentials } = useStore()
 
-  if (!credentials || !isAuthenticated) {
+  // If we have saved credentials, go straight to the main app
+  // Auth verification happens in the background inside MainApp
+  if (!credentials) {
     return <LoginScreen />
   }
 
